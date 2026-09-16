@@ -712,6 +712,35 @@
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
+
+         // Shrink large photos before upload: an un-resized iPhone photo can be 5-10MB, and
+         // sending several of those as base64 in one request is what makes the form hang or
+         // time out on a slow connection. Skip HEIC (canvas can't decode it reliably) and any
+         // image already reasonably small; only downscale+re-encode when it actually helps.
+         function compressImage(file){
+                  var isHeic = /\.heic$/i.test(file.name) || /\.heif$/i.test(file.name) || file.type === 'image/heic' || file.type === 'image/heif';
+                  if (isHeic || !file.type || file.type.indexOf('image/') !== 0) return Promise.resolve(file);
+                  return new Promise(function(resolve){
+                             var img = new Image();
+                             var url = URL.createObjectURL(file);
+                             img.onload = function(){
+                                          var maxDim = 1600;
+                                          var scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+                                          if (scale >= 1 && file.size < 1500000) { URL.revokeObjectURL(url); resolve(file); return; }
+                                          var canvas = document.createElement('canvas');
+                                          canvas.width = Math.max(1, Math.round(img.width * scale));
+                                          canvas.height = Math.max(1, Math.round(img.height * scale));
+                                          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                                          canvas.toBlob(function(blob){
+                                                         URL.revokeObjectURL(url);
+                                                         if (blob && blob.size < file.size) resolve(new File([blob], file.name, { type: 'image/jpeg' }));
+                                                         else resolve(file);
+                                          }, 'image/jpeg', 0.82);
+                             };
+                             img.onerror = function(){ URL.revokeObjectURL(url); resolve(file); };
+                             img.src = url;
+                  });
+         }
   }
 
   form.addEventListener('submit', function(e){
@@ -741,6 +770,7 @@
     errorNote.style.display = 'none';
 
     var payload = {
+         var submissionId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2));
       name: form.name.value,
       contact_method: form.contact_method.value,
       contact_value: form.contact_value.value,
@@ -752,7 +782,8 @@
       timing: form.timing.value,
       budget: form.budget.value,
       notes: form.notes.value,
-      references: []
+      submissionId: submissionId,
+           references: []
     };
 
     // Reference photos are sent as base64 inside the JSON body (not multipart/form-data) —
@@ -761,9 +792,11 @@
     var files = selectedFiles.slice(0, MAX_PHOTOS);
 
     Promise.all(files.map(function(f){
-      return fileToBase64(f).then(function(b64){
-        return { filename: f.name, mimeType: f.type || 'application/octet-stream', data: b64, comment: f.__comment || '' };
-      });
+    return compressImage(f).then(function(cf){
+               return fileToBase64(cf).then(function(b64){
+                            return { filename: f.name, mimeType: cf.type || 'application/octet-stream', data: b64, comment: f.__comment || '' };
+               });
+    });
     })).then(function(refs){
       payload.references = refs;
       // text/plain avoids a CORS preflight; the server still JSON.parses the body regardless of declared type.
