@@ -317,6 +317,14 @@
   button[type="submit"]:hover{opacity:0.94;transform:translateY(-1px);box-shadow:0 16px 28px -12px rgba(59,68,35,0.55);}
   button[type="submit"]:active{transform:translateY(0);}
   button[type="submit"]:disabled{opacity:0.6;cursor:default;transform:none;box-shadow:none;}
+  /* While actively sending, pulse the button so it's obviously still working and not
+     just stuck — this matters most during the network wait, when the progress bar
+     itself can't show real percentage and would otherwise look frozen. */
+  button[type="submit"].is-sending{opacity:0.85;animation:submitPulse 1.4s ease-in-out infinite;}
+  @keyframes submitPulse{
+    0%, 100%{opacity:0.6;}
+    50%{opacity:0.95;}
+  }
   #thankyou{
     display:none;
     text-align:center;
@@ -356,6 +364,18 @@
     background:var(--green, #3B4423);
     border-radius:999px;
     transition:width 0.25s ease;
+  }
+  /* Once photos are processed and we're just waiting on the server, we don't know real
+     progress anymore, so a static bar reads as frozen. Switch to a moving stripe instead
+     so it's visibly still working during that wait. */
+  .upload-progress-fill.indeterminate{
+    width:40% !important;
+    background:linear-gradient(90deg, var(--green, #3B4423) 0%, #7c8a55 50%, var(--green, #3B4423) 100%);
+    animation:indeterminateSlide 1.2s ease-in-out infinite;
+  }
+  @keyframes indeterminateSlide{
+    0%{transform:translateX(-100%);}
+    100%{transform:translateX(250%);}
   }
   .upload-progress-text{
     margin-top:8px;
@@ -837,6 +857,7 @@
 
     submitBtn.disabled = true;
     submitBtn.textContent = 'Sending…';
+    submitBtn.classList.add('is-sending');
     errorNote.style.display = 'none';
        var submissionId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2));
 
@@ -901,6 +922,10 @@
     function startWaitMessages(){
       uploadProgress.style.display = 'block';
       uploadProgressText.textContent = waitMessages[0];
+      // We no longer know real progress once photos are uploaded and we're just waiting
+      // on the server, so switch the bar to a moving stripe instead of leaving it sitting
+      // at a fixed width — a static bar during a long wait reads as frozen.
+      uploadProgressFill.classList.add('indeterminate');
       waitTimer = setInterval(function(){
         waitStep = Math.min(waitStep + 1, waitMessages.length - 1);
         uploadProgressText.textContent = waitMessages[waitStep];
@@ -908,6 +933,7 @@
     }
     function stopWaitMessages(){
       if (waitTimer) { clearInterval(waitTimer); waitTimer = null; }
+      uploadProgressFill.classList.remove('indeterminate');
     }
 
     var controller = window.AbortController ? new AbortController() : null;
@@ -930,6 +956,7 @@
       stopWaitMessages();
       if (result && result.status === 'ok') {
         uploadProgress.style.display = 'none';
+        submitBtn.classList.remove('is-sending');
         form.style.display = 'none';
         document.getElementById('thankyou').style.display = 'block';
       } else {
@@ -947,6 +974,7 @@
       uploadProgress.style.display = 'none';
       submitBtn.disabled = false;
       submitBtn.textContent = 'Send request';
+      submitBtn.classList.remove('is-sending');
     });
   });
 </script>
