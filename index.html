@@ -831,32 +831,65 @@
       uploadProgressText.textContent = label;
     }
 
-    setProgress(0, total > 0 ? 'Preparing photo 1 of ' + total + '…' : 'Sending…');
+    setProgress(0, total > 0 ? 'Preparing photo' + (total > 1 ? 's' : '') + '…' : 'Sending…');
 
-    // Photos are processed one at a time (not all at once) so we can show real progress
-    // and so a slow phone doesn't try to compress/encode everything simultaneously.
-    var refs = [];
-    var chain = Promise.resolve();
-    files.forEach(function(f, i){
-      chain = chain.then(function(){
-        setProgress(i, 'Uploading photo ' + (i + 1) + ' of ' + total + '…');
-        return compressImage(f).then(function(cf){
-          return fileToBase64(cf).then(function(b64){
-            refs.push({ filename: f.name, mimeType: cf.type || 'application/octet-stream', data: b64, comment: f.__comment || '' });
-            setProgress(i + 1, (i + 1 < total) ? 'Uploading photo ' + (i + 2) + ' of ' + total + '…' : 'Sending your request…');
-          });
+    // Photos are compressed/encoded in parallel (not one at a time) so multiple photos
+    // don't add up their processing time serially before we even reach the server —
+    // progress just counts how many have finished so far, in whatever order they land.
+    var refs = new Array(total);
+    var doneCount = 0;
+    var processing = files.map(function(f, i){
+      return compressImage(f).then(function(cf){
+        return fileToBase64(cf).then(function(b64){
+          refs[i] = { filename: f.name, mimeType: cf.type || 'application/octet-stream', data: b64, comment: f.__comment || '' };
+          doneCount++;
+          setProgress(doneCount, (doneCount < total) ? 'Preparing photo ' + doneCount + ' of ' + total + '…' : 'Sending your request…');
         });
       });
     });
 
-    chain.then(function(){
+    // The Apps Script backend can genuinely take a while (writing photos to Drive,
+    // sending the notification email) — without this, a slow-but-working submission
+    // looks identical to a frozen one. Keep the user informed instead of leaving the
+    // same static text up, and give up after 90s so it never hangs forever.
+    var waitMessages = [
+      'Sending your request…',
+      'Still sending — this can take a little while with photos…',
+      'Almost there, hang tight…',
+      'This is taking longer than usual, still working…'
+    ];
+    var waitStep = 0;
+    var waitTimer = null;
+    function startWaitMessages(){
+      uploadProgress.style.display = 'block';
+      uploadProgressText.textContent = waitMessages[0];
+      waitTimer = setInterval(function(){
+        waitStep = Math.min(waitStep + 1, waitMessages.length - 1);
+        uploadProgressText.textContent = waitMessages[waitStep];
+      }, 12000);
+    }
+    function stopWaitMessages(){
+      if (waitTimer) { clearInterval(waitTimer); waitTimer = null; }
+    }
+
+    var controller = window.AbortController ? new AbortController() : null;
+    var timeoutId = controller ? setTimeout(function(){ controller.abort(); }, 90000) : null;
+
+    Promise.all(processing).then(function(){
       payload.references = refs;
-      if (total === 0) setProgress(0, 'Sending…');
+      startWaitMessages();
       // text/plain avoids a CORS preflight; the server still JSON.parses the body regardless of declared type.
-      return fetch(form.action, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
+      return fetch(form.action, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload),
+        signal: controller ? controller.signal : undefined
+      });
     }).then(function(resp){
       return resp.json().catch(function(){ return { status: 'error' }; });
     }).then(function(result){
+      if (timeoutId) clearTimeout(timeoutId);
+      stopWaitMessages();
       if (result && result.status === 'ok') {
         uploadProgress.style.display = 'none';
         form.style.display = 'none';
@@ -865,7 +898,12 @@
         throw new Error(result && result.message ? result.message : 'Unknown error');
       }
     }).catch(function(err){
+      if (timeoutId) clearTimeout(timeoutId);
+      stopWaitMessages();
       console.error('Tattoo form submit failed:', err);
+      errorNote.textContent = (err && err.name === 'AbortError')
+        ? 'This is taking too long to send — please check your connection and try again. If your first attempt already went through, sending again is safe and won’t create a duplicate.'
+        : 'Something went wrong sending the form — please try again, or message me directly on Instagram.';
       errorNote.style.display = 'block';
       errorNote.scrollIntoView({ behavior: 'smooth', block: 'center' });
       uploadProgress.style.display = 'none';
