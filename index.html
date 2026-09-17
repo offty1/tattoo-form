@@ -339,6 +339,30 @@
     font-size:0.85rem;
     margin-bottom:18px;
   }
+  .upload-progress{
+    display:none;
+    margin:0 0 18px;
+  }
+  .upload-progress-bar{
+    width:100%;
+    height:8px;
+    background:#e9e3d8;
+    border-radius:999px;
+    overflow:hidden;
+  }
+  .upload-progress-fill{
+    height:100%;
+    width:0%;
+    background:var(--green, #3B4423);
+    border-radius:999px;
+    transition:width 0.25s ease;
+  }
+  .upload-progress-text{
+    margin-top:8px;
+    font-size:0.85rem;
+    color:var(--muted);
+    text-align:center;
+  }
 </style>
 </head>
 <body>
@@ -443,6 +467,11 @@
     </div>
 
     <button type="submit" id="submit-btn">Send request</button>
+
+    <div class="upload-progress" id="upload-progress" aria-live="polite">
+      <div class="upload-progress-bar"><div class="upload-progress-fill" id="upload-progress-fill"></div></div>
+      <div class="upload-progress-text" id="upload-progress-text"></div>
+    </div>
   </form>
 
   <div id="thankyou">
@@ -703,6 +732,9 @@
   var form = document.getElementById('tattoo-form');
   var submitBtn = document.getElementById('submit-btn');
   var errorNote = document.getElementById('error-note');
+  var uploadProgress = document.getElementById('upload-progress');
+  var uploadProgressFill = document.getElementById('upload-progress-fill');
+  var uploadProgressText = document.getElementById('upload-progress-text');
 
   // Read a File as base64 (without the "data:...;base64," prefix)
   function fileToBase64(file){
@@ -789,21 +821,44 @@
     // Apps Script web apps silently drop file blobs from e.parameter/e.parameters when the
     // POST comes from an external page, so this is the reliable way to get them through.
     var files = selectedFiles.slice(0, MAX_PHOTOS);
+    var total = files.length;
 
-    Promise.all(files.map(function(f){
-    return compressImage(f).then(function(cf){
-               return fileToBase64(cf).then(function(b64){
-                            return { filename: f.name, mimeType: cf.type || 'application/octet-stream', data: b64, comment: f.__comment || '' };
-               });
+    function setProgress(doneCount, label){
+      if (total === 0) { uploadProgress.style.display = 'none'; return; }
+      uploadProgress.style.display = 'block';
+      var pct = Math.round((doneCount / (total + 1)) * 100); // +1 leaves room for the final "sending" step
+      uploadProgressFill.style.width = pct + '%';
+      uploadProgressText.textContent = label;
+    }
+
+    setProgress(0, total > 0 ? 'Preparing photo 1 of ' + total + '…' : 'Sending…');
+
+    // Photos are processed one at a time (not all at once) so we can show real progress
+    // and so a slow phone doesn't try to compress/encode everything simultaneously.
+    var refs = [];
+    var chain = Promise.resolve();
+    files.forEach(function(f, i){
+      chain = chain.then(function(){
+        setProgress(i, 'Uploading photo ' + (i + 1) + ' of ' + total + '…');
+        return compressImage(f).then(function(cf){
+          return fileToBase64(cf).then(function(b64){
+            refs.push({ filename: f.name, mimeType: cf.type || 'application/octet-stream', data: b64, comment: f.__comment || '' });
+            setProgress(i + 1, (i + 1 < total) ? 'Uploading photo ' + (i + 2) + ' of ' + total + '…' : 'Sending your request…');
+          });
+        });
+      });
     });
-    })).then(function(refs){
+
+    chain.then(function(){
       payload.references = refs;
+      if (total === 0) setProgress(0, 'Sending…');
       // text/plain avoids a CORS preflight; the server still JSON.parses the body regardless of declared type.
       return fetch(form.action, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
     }).then(function(resp){
       return resp.json().catch(function(){ return { status: 'error' }; });
     }).then(function(result){
       if (result && result.status === 'ok') {
+        uploadProgress.style.display = 'none';
         form.style.display = 'none';
         document.getElementById('thankyou').style.display = 'block';
       } else {
@@ -811,6 +866,7 @@
       }
     }).catch(function(err){
       errorNote.style.display = 'block';
+      uploadProgress.style.display = 'none';
       submitBtn.disabled = false;
       submitBtn.textContent = 'Send request';
     });
