@@ -757,9 +757,11 @@
       var img = new Image();
       var url = URL.createObjectURL(file);
       img.onload = function(){
-        var maxDim = 1600;
+        // Reference photos don't need to be print-quality — keep them small so submissions
+        // with several photos actually finish quickly on a normal connection.
+        var maxDim = 1280;
         var scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-        if (scale >= 1 && file.size < 1500000) { URL.revokeObjectURL(url); resolve(file); return; }
+        if (scale >= 1 && file.size < 700000) { URL.revokeObjectURL(url); resolve(file); return; }
         var canvas = document.createElement('canvas');
         canvas.width = Math.max(1, Math.round(img.width * scale));
         canvas.height = Math.max(1, Math.round(img.height * scale));
@@ -768,7 +770,7 @@
           URL.revokeObjectURL(url);
           if (blob && blob.size < file.size) resolve(new File([blob], file.name, { type: 'image/jpeg' }));
           else resolve(file);
-        }, 'image/jpeg', 0.82);
+        }, 'image/jpeg', 0.72);
       };
       img.onerror = function(){ URL.revokeObjectURL(url); resolve(file); };
       img.src = url;
