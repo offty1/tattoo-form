@@ -337,6 +337,8 @@
   #thankyou h2{font-family:var(--font-display);font-weight:400;margin:0 0 10px;font-size:2.2rem;color:var(--ink);}
   #thankyou p{color:var(--muted);line-height:1.6;}
   .sprout{color:var(--green);}
+  .privacy-note{font-size:0.78rem;line-height:1.55;color:var(--muted);text-align:center;margin:14px 0 0;}
+  .privacy-note a{color:var(--accent-dark);text-decoration:underline;text-underline-offset:2px;}
   .error-note{
     display:none;
     background:#fbeceb;
@@ -419,6 +421,7 @@
       </div>
       <div class="conditional" id="contact-text">
         <input type="text" inputmode="tel" name="contact_value_text" id="contact_value_text" placeholder="+1 555 123 4567" value="+1 ">
+        <div class="hint hint-after-input">By choosing Text, you're okay with me texting you about your request. Just reply STOP anytime.</div>
       </div>
       <input type="hidden" name="contact_method" id="contact_method_hidden">
       <input type="hidden" name="contact_value" id="contact_value_hidden">
@@ -492,6 +495,7 @@
       <div class="upload-progress-bar"><div class="upload-progress-fill" id="upload-progress-fill"></div></div>
       <div class="upload-progress-text" id="upload-progress-text"></div>
     </div>
+    <p class="privacy-note">Your info and reference photos are only used to plan your tattoo. I never share or sell them, and I always ask before posting anything. <a href="privacy.html">Privacy Policy</a></p>
   </form>
 
   <div id="thankyou">
