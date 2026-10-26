@@ -410,7 +410,6 @@
       <div class="choice-row" data-group="contact_method">
         <label class="choice choice-icon"><input type="checkbox" name="contact_method_choice" value="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17" cy="7" r="0.9" fill="currentColor" stroke="none"/></svg>Instagram</label>
         <label class="choice choice-icon"><input type="checkbox" name="contact_method_choice" value="Email"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M4 6.5l8 6.5 8-6.5"/></svg>Email</label>
-        <label class="choice choice-icon"><input type="checkbox" name="contact_method_choice" value="Text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5.5h16v10.5H9.5L5.5 20v-4H4z" stroke-linejoin="round"/></svg>Text</label>
       </div>
       <div class="conditional" id="contact-instagram">
         <input type="text" name="contact_value_ig" id="contact_value_ig" placeholder="@your.handle" value="@">
@@ -418,10 +417,6 @@
       </div>
       <div class="conditional" id="contact-email">
         <input type="email" name="contact_value_email" placeholder="you@email.com">
-      </div>
-      <div class="conditional" id="contact-text">
-        <input type="text" inputmode="tel" name="contact_value_text" id="contact_value_text" placeholder="+1 555 123 4567" value="+1 ">
-        <div class="hint hint-after-input">By choosing Text, you're okay with me texting you about your request. Just reply STOP anytime.</div>
       </div>
       <input type="hidden" name="contact_method" id="contact_method_hidden">
       <input type="hidden" name="contact_value" id="contact_value_hidden">
@@ -528,22 +523,16 @@
   // Branching contact fields — multiple methods can be selected at once
   var contactBoxes = {
     Instagram: document.getElementById('contact-instagram'),
-    Email: document.getElementById('contact-email'),
-    Text: document.getElementById('contact-text')
+    Email: document.getElementById('contact-email')
   };
   document.querySelectorAll('input[name="contact_method_choice"]').forEach(function(cb){
     cb.addEventListener('change', function(){
       if (contactBoxes[cb.value]) contactBoxes[cb.value].classList.toggle('visible', cb.checked);
-      // Jump straight into the Instagram/phone field, cursor at the end, so there's nothing to type but the rest
+      // Jump straight into the Instagram field, cursor at the end, so there's nothing to type but the rest
       if (cb.value === 'Instagram' && cb.checked) {
         var igInput = document.getElementById('contact_value_ig');
         igInput.focus();
         igInput.setSelectionRange(igInput.value.length, igInput.value.length);
-      }
-      if (cb.value === 'Text' && cb.checked) {
-        var textInput = document.getElementById('contact_value_text');
-        textInput.focus();
-        textInput.setSelectionRange(textInput.value.length, textInput.value.length);
       }
     });
   });
@@ -556,12 +545,6 @@
   });
   igInput.addEventListener('focus', function(){
     if (!igInput.value) igInput.value = '@';
-  });
-
-  // Same idea for the phone field, but with "+1 " — easy to overwrite if someone's outside the US
-  var textInput = document.getElementById('contact_value_text');
-  textInput.addEventListener('focus', function(){
-    if (!textInput.value) textInput.value = '+1 ';
   });
 
   // Limit to 5 files, show a thumbnail + optional comment field per photo
@@ -853,7 +836,6 @@
       var val = '';
       if (cb.value === 'Instagram') val = form.contact_value_ig.value;
       if (cb.value === 'Email') val = form.contact_value_email.value;
-      if (cb.value === 'Text') val = form.contact_value_text.value;
       valueParts.push(cb.value + ': ' + val);
     });
     document.getElementById('contact_method_hidden').value = methodNames.join(', ');
